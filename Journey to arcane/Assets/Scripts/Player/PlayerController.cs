@@ -14,6 +14,7 @@ public class PlayerController : MonoBehaviour
   
     //public AudioSource jumpSound;
     //public AudioSource landingSound;
+    public state status;
     private float move;
     public float maxSpeed;
     public float groundCheckRadius;
@@ -41,8 +42,8 @@ public class PlayerController : MonoBehaviour
     public Transform wallCheck;
     bool isSliding;
     public float wallSlidingSpeed;
-    
 
+    public ParticleController particleController;
     private Rigidbody2D myBody;
     private Animator myAnim;
     
@@ -52,7 +53,8 @@ public class PlayerController : MonoBehaviour
         vecGravity = new Vector2(0, -Physics2D.gravity.y);
         myBody = GetComponent<Rigidbody2D> ();
         myAnim = GetComponent<Animator> ();
-        
+        myBody.collisionDetectionMode = CollisionDetectionMode2D.Continuous; 
+
         facingRight = true;
     
     }
@@ -64,11 +66,26 @@ public class PlayerController : MonoBehaviour
             return;
         }
         CheckInput();
-        Jump();
-        if (Input.GetButtonDown("Dash") && canDash)
+        if(status != state.die)
         {
-            StartCoroutine(Dash());
+            Jump();
+            Movement();
+
+            if (Input.GetButtonDown("Dash") && canDash)
+            {
+                StartCoroutine(Dash());
+            }
+
+            if (move > 0 && !facingRight)
+            {
+                flip();
+            }
+            else if (move < 0 && facingRight)
+            {
+                flip();
+            }
         }
+        
     }
 
     private void FixedUpdate()
@@ -78,15 +95,8 @@ public class PlayerController : MonoBehaviour
             return;
         }
        
-            Movement();
-            if (move > 0 && !facingRight)
-            {
-                flip();
-            }
-            else if (move < 0 && facingRight)
-            {
-                flip();
-            }
+            
+           
 
             if (myBody.velocity.x != 0)
                 myAnim.SetBool("isMove", true);
@@ -97,7 +107,7 @@ public class PlayerController : MonoBehaviour
             }
             WallJump();
 
-            myAnim.SetFloat("yVelocity", myBody.velocity.y);
+           // myAnim.SetFloat("yVelocity", myBody.velocity.y);
  
     }
 
@@ -111,50 +121,50 @@ public class PlayerController : MonoBehaviour
     {
         if(Input.GetKey(KeyCode.LeftShift))
         {
-            maxSpeed = 14;
+            maxSpeed = 8;
             myAnim.SetBool("isRun", true);
         }
         else
         {
-            maxSpeed = 8;
+            maxSpeed = 6;
             myAnim.SetBool("isRun", false);
         }
         myBody.velocity = new Vector2(move*maxSpeed, myBody.velocity.y);
-
+        status = state.normal;
     }
 
     private void Jump()
     {
-        if(Input.GetKeyDown(KeyCode.Space) && isGrounded())
+        if (Input.GetKeyDown(KeyCode.Space) && isGrounded())
         {
             myBody.velocity = new Vector2(myBody.velocity.x, jumpHeight);
             isJumping = true;
-            jumpCounter = 0;     
-            myAnim.SetBool("isJump", true);
+            jumpCounter = 0;
+            AudioManager.Instance.PlaySFX("Jump");
 
         }
 
 
-        if (myBody.velocity.y>0 && isJumping)
+        if (myBody.velocity.y > 0 && isJumping)
         {
             jumpCounter += Time.deltaTime;
-            if(jumpCounter > jumpTime)  isJumping = false;
+            if (jumpCounter > jumpTime) isJumping = false;
 
-            float t =  jumpCounter / jumpTime;
+            float t = jumpCounter / jumpTime;
             float currentJumpB = jumpBuffer;
-            if(t>0.5f)
+            if (t > 0.5f)
             {
-                currentJumpB = jumpBuffer * (1-t);
+                currentJumpB = jumpBuffer * (1 - t);
             }
 
-            myBody.velocity += vecGravity * currentJumpB * Time.deltaTime; 
+            myBody.velocity += vecGravity * currentJumpB * Time.deltaTime;
         }
 
-        if(Input.GetKeyUp(KeyCode.Space))
+        if (Input.GetKeyUp(KeyCode.Space))
         {
             isJumping = false;
-            jumpCounter =0;
-            if(myBody.velocity.y >0)
+            jumpCounter = 0;
+            if (myBody.velocity.y > 0)
             {
                 myBody.velocity = new Vector2(myBody.velocity.x, myBody.velocity.y * 0.6f);
             }
@@ -163,25 +173,28 @@ public class PlayerController : MonoBehaviour
         if (myBody.velocity.y < 0)
         {
             myBody.velocity -= vecGravity * fallSpeed * Time.deltaTime;
+            if (isGrounded())
+            {
+                //myAnim.SetBool("isJump", false);
+                //AudioManager.Instance.PlaySFX("Landing");
+
+            }
         }
 
-        if (isGrounded())
-        {
-            myAnim.SetBool("isJump", false);
-        }
+        
     }
-
     private void WallJump()
     {
-        if(isWallTouch()  && move != 0)
+        if (isWallTouch() && move != 0)
         {
             isSliding = true;
-        }else
+        }
+        else
         {
             isSliding = false;
         }
 
-        if(isSliding)
+        if (isSliding)
         {
 
             myBody.velocity = new Vector2(myBody.velocity.x, Mathf.Clamp(myBody.velocity.y, -wallSlidingSpeed, float.MaxValue));
@@ -229,11 +242,14 @@ public class PlayerController : MonoBehaviour
     {
         return (int)dashDirection;
     }
-    void flip(){
+    void flip()
+    {
+        particleController.PlayTouchParticle(wallCheck.position);
         facingRight = !facingRight;
-        Vector3 theScale = transform.localScale;
-        theScale.x *= -1;
-        transform.localScale = theScale; 
+        //Vector3 theScale = transform.localScale;
+        //theScale.x *= -1;
+        //transform.localScale = theScale;
+        transform.Rotate(0f, 180f, 0f);
     }
 
     bool isGrounded()
@@ -243,14 +259,24 @@ public class PlayerController : MonoBehaviour
 
     bool isWallTouch()
     {
-        return Physics2D.OverlapBox(wallCheck.position, new Vector2(0.4f, 1.6f), 0, groundLayer);
+        return Physics2D.OverlapBox(wallCheck.position, new Vector2(0.3f, 1.4f), 0, groundLayer);
     }
 
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        if(collision.gameObject.tag == "Enemy")
+        {
+            collision.gameObject.GetComponent<HitStop>().StopTime(0.05f, 10, 0.1f);
+        }
+    }
     private void OnDrawGizmos()
     {
         Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
     }
+}
 
-
-
+public enum state
+{
+    normal,
+    die
 }

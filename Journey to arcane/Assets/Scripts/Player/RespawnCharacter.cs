@@ -7,7 +7,7 @@ using UnityEngine.UI;
 public class RespawnCharacter : MonoBehaviour
 {
     public static RespawnCharacter instance;
-    Vector2 startPos;
+    Vector2 checkpointPos;
     Rigidbody2D myBody;
 
     public TextMeshProUGUI txtLives;
@@ -15,15 +15,17 @@ public class RespawnCharacter : MonoBehaviour
     public AudioSource respawnSound;
     public AudioSource deathSound;
     SceneController sceneController;
-    //PlayerAbility playerability;
-
+    [SerializeField] PlayerController playerController;
+    [SerializeField] GameObject player;
+    [SerializeField] GameObject gameOver;
+    [SerializeField] Door doorChain;
+    [SerializeField] bool checkDoor = false;
     private void Awake()
     {
         if (instance == null)
         {
             instance = this;
         }
-        //playerability = GetComponent<PlayerAbility>();
         myBody = GetComponent<Rigidbody2D>();
         myAnim = GetComponent<Animator>();
     }
@@ -31,7 +33,7 @@ public class RespawnCharacter : MonoBehaviour
     private void Start()
     {
         sceneController = SceneController.instance;
-        startPos = transform.position;
+        checkpointPos = transform.position;
         UpdateLivesText();
     }
 
@@ -39,14 +41,22 @@ public class RespawnCharacter : MonoBehaviour
     {
         if (collision.CompareTag("Obstacle"))
         {
-            Die();
+            if(playerController.status != state.die)
+            {
+                Die();
+            }        
         }
     }
 
-    void Die()
+    public void UpdateCheckpoint(Vector2 pos)
     {
+        checkpointPos = pos;
+    }
+    public void Die()
+    {
+        playerController.status = state.die;
         //myanim.SetTrigger("white");
-        //deathSound.Play();
+        AudioManager.Instance.PlaySFX("GameOver");
         myAnim.SetTrigger("death");
         if (sceneController.lives > 0)
         {
@@ -54,32 +64,28 @@ public class RespawnCharacter : MonoBehaviour
         }
         else
         {
-            GameOver();
+            gameOver.SetActive(true);
         }
-        //{
-        //    gameObject.GetComponent<PlayerController>().enabled = false;
-        //    playerability.playerPrefab.GetComponent<PlayerController>().enabled = true;
-        //}
+
     }
 
     IEnumerator Respawn(float duration)
     {
-        myBody.simulated = false;
         myBody.velocity = Vector2.zero;
-
+        //player.SetActive(false);
         yield return new WaitForSeconds(duration);
-        
+
+
         myAnim.SetTrigger("alive");
         sceneController.DecreaseLife();
 
-        transform.position = startPos;
-        myBody.simulated = true;
-        //respawnSound.Play();
-    }
-
-    private void GameOver()
-    {
-        SceneManager.LoadScene("GameOver");
+        transform.position = checkpointPos;
+        playerController.status = state.normal;
+        AudioManager.Instance.PlaySFX("Spawn");
+        if (checkDoor)
+        {
+            doorChain.myAnim.SetTrigger("Up");
+        }
     }
 
     public void UpdateLivesText()
